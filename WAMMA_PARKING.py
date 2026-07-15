@@ -51,6 +51,7 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
 
     df = load_csv(uploaded_file)
+    df.columns = df.columns.str.strip()
 
     st.success("데이터를 불러왔습니다.")
     st.dataframe(df)
@@ -79,68 +80,66 @@ if address:
 
         st.warning("검색 결과가 없습니다.")
 
-# ==========================
-# 지도 시각화
-# ==========================
-
-st.subheader("🗺️ 공영주차장 지도")
-
-# 위도, 경도 숫자로 변환
-df["위도"] = pd.to_numeric(df["위도"], errors="coerce")
-df["경도"] = pd.to_numeric(df["경도"], errors="coerce")
-
-# 좌표 없는 행 제거
-map_df = df.dropna(subset=["위도", "경도"])
-
-# 지도 중심
-center = [
-    map_df["위도"].mean(),
-    map_df["경도"].mean()
-]
-
-# 지도 생성
-m = folium.Map(
-    location=center,
-    zoom_start=12,
-    tiles="OpenStreetMap"
-)
-
-# MarkerCluster 생성
-cluster = MarkerCluster().add_to(m)
-
-# 마커 추가
-for _, row in map_df.iterrows():
-
-    popup_html = f"""
-    <h4>{row['주차장명']}</h4>
-
-    <hr>
-
-    <b>주소</b><br>
-    {row['주소']}<br><br>
-
-    <b>기본요금</b><br>
-    {row['기본요금']}<br><br>
-
-    <b>추가요금</b><br>
-    {row['추가요금']}
-    """
-
-    folium.Marker(
-        location=[row["위도"], row["경도"]],
-        tooltip=row["주차장명"],
-        popup=folium.Popup(
-            popup_html,
-            max_width=350
-        ),
-        icon=folium.Icon(
-            color="blue",
-            icon="info-sign"
-        )
-    ).add_to(cluster)
-
-st_folium(
-    m,
-    width=1200,
-    height=650
-)
+    # ==========================
+    # 지도 시각화
+    # ==========================
+    
+    st.subheader("🗺️ 공영주차장 지도")
+    
+    # 위도, 경도 숫자로 변환
+    df["위도"] = pd.to_numeric(df["위도"], errors="coerce")
+    df["경도"] = pd.to_numeric(df["경도"], errors="coerce")
+    
+    # 좌표 없는 행 제거
+    map_df = df.dropna(subset=["위도", "경도"])
+    
+    # 지도 중심
+    center = [
+        map_df["위도"].mean(),
+        map_df["경도"].mean()
+    ]
+    
+    # 지도 생성
+    m = folium.Map(
+        location=center,
+        zoom_start=12,
+        tiles="OpenStreetMap"
+    )
+    
+    # MarkerCluster 생성
+    cluster = MarkerCluster().add_to(m)
+    
+    # 마커 추가
+    for _, row in map_df.iterrows():
+    
+        popup_html = f"""
+        <h4>{row['주차장명']}</h4>
+    
+        <b>주소</b><br>
+        {row['주소']}<br><br>
+    
+        <b>기본요금</b><br>
+        {row['기본 주차 요금']}원<br><br>
+    
+        <b>추가요금</b><br>
+        {row['추가 단위 요금']}원
+        """
+    
+        folium.Marker(
+            location=[row["위도"], row["경도"]],
+            tooltip=row["주차장명"],
+            popup=folium.Popup(
+                popup_html,
+                max_width=350
+            ),
+            icon=folium.Icon(
+                color="blue",
+                icon="info-sign"
+            )
+        ).add_to(cluster)
+    
+    st_folium(
+        m,
+        width=1200,
+        height=650
+    )
