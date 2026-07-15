@@ -7,94 +7,51 @@ st.set_page_config(page_title="공영주차장 안내", layout="wide")
 
 st.title("🚗 공영주차장 정보 안내")
 
+# ==========================
+# CSV 읽기 함수
+# ==========================
+def load_csv(file):
+    encodings = [
+        "utf-8",
+        "utf-8-sig",
+        "cp949",
+        "euc-kr",
+        "latin1"
+    ]
+
+    for enc in encodings:
+        try:
+            file.seek(0)
+            return pd.read_csv(
+                file,
+                encoding=enc,
+                sep=None,
+                engine="python"
+            )
+        except Exception:
+            continue
+
+    raise ValueError(
+        "지원하지 않는 CSV 형식입니다."
+    )
+
+
+# ==========================
+# 파일 업로드
+# ==========================
 uploaded_file = st.file_uploader(
     "CSV 파일 업로드",
     type=["csv"]
 )
 
-if uploaded_file:
+# ==========================
+# CSV 읽기
+# ==========================
+if uploaded_file is not None:
 
-    df = pd.read_csv(uploaded_file)
+    df = load_csv(uploaded_file)
 
-    st.success("데이터 업로드 완료!")
-
-    st.subheader("데이터 미리보기")
+    st.success("데이터를 불러왔습니다.")
     st.dataframe(df)
 
-    ###################################
-    # 주소 검색
-    ###################################
-
-    st.subheader("주소 검색")
-
-    address = st.text_input("주소를 입력하세요")
-
-    if address:
-
-        result = df[df["주소"].str.contains(address, case=False, na=False)]
-
-        if len(result):
-
-            st.success(f"{len(result)}개의 주차장을 찾았습니다.")
-
-            for _, row in result.iterrows():
-
-                st.markdown(f"""
-### {row['주차장명']}
-
-**주소**
-
-{row['주소']}
-
-**기본요금**
-
-{row['기본요금']}
-
-**추가요금**
-
-{row['추가요금']}
-""")
-
-        else:
-
-            st.error("검색 결과가 없습니다.")
-
-    ###################################
-    # 지도
-    ###################################
-
-    st.subheader("공영주차장 지도")
-
-    center_lat = df["위도"].mean()
-    center_lon = df["경도"].mean()
-
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=12
-    )
-
-    for _, row in df.iterrows():
-
-        popup = f"""
-<b>{row['주차장명']}</b><br>
-주소 : {row['주소']}<br>
-기본요금 : {row['기본요금']}<br>
-추가요금 : {row['추가요금']}
-"""
-
-        tooltip = f"""
-{row['주차장명']}
-"""
-
-        folium.Marker(
-            [row["위도"], row["경도"]],
-            popup=popup,
-            tooltip=tooltip,
-            icon=folium.Icon(color="blue", icon="info-sign")
-        ).add_to(m)
-
-    st_folium(
-        m,
-        width=1000,
-        height=600
-    )
+    # 여기부터 주소검색, 지도 등을 작성
