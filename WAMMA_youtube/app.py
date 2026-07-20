@@ -22,7 +22,7 @@ from collections import Counter
 
 from io import BytesIO
 
-import re
+import requests
 import os
 import tempfile
 
@@ -348,6 +348,20 @@ def create_wordcloud(words):
 
     font_path = "NanumGothic.ttf"
 
+    # Streamlit Cloud에서 폰트가 없으면 다운로드
+    if not os.path.exists(font_path):
+
+        url = (
+            "https://github.com/google/fonts/raw/main/"
+            "ofl/nanumgothic/NanumGothic-Regular.ttf"
+        )
+
+        r = requests.get(url)
+
+        with open(font_path, "wb") as f:
+            f.write(r.content)
+
+
     wc = WordCloud(
 
         font_path=font_path,
@@ -361,6 +375,7 @@ def create_wordcloud(words):
         colormap="tab20"
 
     ).generate(text)
+
 
     return wc
 
