@@ -55,10 +55,14 @@ st.caption(
 
 st.sidebar.title("설정")
 
-API_KEY = st.sidebar.text_input(
-    "YouTube API Key",
-    type="password"
-)
+if "YouTube_API_Key" in st.secrets:
+    API_KEY = st.secrets["YouTube_API_Key"]
+
+else:
+    API_KEY = st.sidebar.text_input(
+        "YouTube API Key",
+        type="password"
+    )
 
 MAX_COMMENTS = st.sidebar.slider(
     "댓글 개수",
