@@ -1,0 +1,11 @@
+streamlit
+google-api-python-client
+pandas
+numpy
+plotly
+matplotlib
+wordcloud
+Pillow
+kiwipiepy
+xlsxwriter
+openpyxl
