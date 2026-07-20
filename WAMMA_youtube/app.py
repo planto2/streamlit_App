@@ -559,6 +559,16 @@ def excel_download(df):
 
     output = BytesIO()
 
+    # Excel은 timezone 날짜를 지원하지 않음
+    df = df.copy()
+
+    for col in df.columns:
+
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+
+            df[col] = df[col].dt.tz_localize(None)
+
+
     with pd.ExcelWriter(
 
         output,
@@ -571,9 +581,12 @@ def excel_download(df):
 
             writer,
 
-            index=False
+            index=False,
+
+            sheet_name="댓글분석"
 
         )
+
 
     return output.getvalue()
 ##############################################################
