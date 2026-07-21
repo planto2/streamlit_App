@@ -4,12 +4,13 @@ import pandas as pd
 import random
 import folium
 
+from datetime import datetime
 from streamlit_folium import st_folium
 
 
-# ==============================
-# 설정
-# ==============================
+# ======================================
+# 기본 설정
+# ======================================
 
 st.set_page_config(
     page_title="대한민국 축제 탐험가",
@@ -19,33 +20,38 @@ st.set_page_config(
 
 
 st.title("🎉 대한민국 축제 탐험가")
-st.caption(
-    "한국관광공사 TourAPI 기반 전국 축제 검색 서비스"
+st.write(
+    "한국관광공사 국문 관광정보 서비스 기반 축제 검색"
 )
 
 
-# ==============================
-# API 설정
-# ==============================
+# ======================================
+# API KEY
+# ======================================
 
 try:
+
     API_KEY = st.secrets["TOUR_API_KEY"]
 
 except:
 
     st.error(
         """
-        API 키가 없습니다.
+        Streamlit Secrets에 API 키를 등록해주세요.
 
-        Streamlit Cloud → Settings → Secrets 에 아래 추가:
+        예:
 
-        TOUR_API_KEY="발급받은키"
+        TOUR_API_KEY="발급받은_인증키"
         """
     )
 
     st.stop()
 
 
+
+# ======================================
+# TourAPI 주소
+# ======================================
 
 BASE_URL = (
     "https://apis.data.go.kr/B551011/KorService1/"
@@ -54,13 +60,21 @@ BASE_URL = (
 
 
 
-# ==============================
-# 데이터 요청
-# ==============================
-
+# ======================================
+# 축제 데이터 가져오기
+# ======================================
 
 @st.cache_data(ttl=3600)
-def get_festivals():
+def load_festivals():
+
+
+    today = datetime.now()
+
+    start_date = (
+        f"{today.year}"
+        f"{today.month:02d}"
+        f"{today.day:02d}"
+    )
 
 
     params = {
@@ -75,17 +89,20 @@ def get_festivals():
 
         "numOfRows": 500,
 
-        "pageNo": 1
+        "pageNo": 1,
+
+        "eventStartDate": start_date
 
     }
 
 
     try:
 
+
         response = requests.get(
             BASE_URL,
             params=params,
-            timeout=10
+            timeout=15
         )
 
 
@@ -95,28 +112,63 @@ def get_festivals():
                 f"HTTP 오류 : {response.status_code}"
             )
 
+            st.code(
+                response.text[:1000]
+            )
+
             return []
+
 
 
         data = response.json()
 
 
-        body = (
+
+        header = (
             data
             .get("response", {})
-            .get("body", {})
+            .get("header", {})
+        )
+
+
+        code = header.get(
+            "resultCode"
+        )
+
+
+        if code != "0000":
+
+            st.error(
+                f"""
+                API 오류
+
+                코드 : {code}
+
+                메시지 :
+                {header.get('resultMsg')}
+                """
+            )
+
+            return []
+
+
+
+        body = (
+            data
+            ["response"]
+            ["body"]
         )
 
 
         items = body.get(
-            "items",
-            {}
+            "items"
         )
 
 
-        if items == "":
+        if not items:
 
             return []
+
 
 
         result = items.get(
@@ -125,9 +177,13 @@ def get_festivals():
         )
 
 
-        if isinstance(result, dict):
+        if isinstance(
+            result,
+            dict
+        ):
 
             result = [result]
+
 
 
         return result
@@ -138,21 +194,21 @@ def get_festivals():
 
 
         st.error(
-            f"API 오류 발생 : {e}"
+            f"API 처리 오류 : {e}"
         )
+
 
         return []
 
 
 
+# ======================================
+# 데이터 로드
+# ======================================
 
-festivals = get_festivals()
 
+festivals = load_festivals()
 
-
-# ==============================
-# 데이터 확인
-# ==============================
 
 
 if not festivals:
@@ -162,11 +218,10 @@ if not festivals:
         """
         축제 정보를 가져오지 못했습니다.
 
-        확인할 것:
-
-        1. API 인증키 확인
-        2. 공공데이터포털 활용신청 승인 여부
-        3. Streamlit Secrets 설정 확인
+        확인:
+        - 공공데이터포털 활용신청 승인 여부
+        - Encoding 인증키 사용 여부
+        - Secrets 설정 확인
         """
     )
 
@@ -181,10 +236,9 @@ df = pd.DataFrame(
 
 
 
-# ==============================
-# 세션
-# ==============================
-
+# ======================================
+# 즐겨찾기
+# ======================================
 
 if "favorites" not in st.session_state:
 
@@ -192,25 +246,24 @@ if "favorites" not in st.session_state:
 
 
 
-# ==============================
-# 필터
-# ==============================
+# ======================================
+# 검색
+# ======================================
 
 
-col1,col2 = st.columns(2)
-
+col1, col2 = st.columns(2)
 
 
 with col1:
 
     keyword = st.text_input(
-        "🔎 축제 검색",
-        ""
+        "🔎 축제 검색"
     )
 
 
 
 with col2:
+
 
     if "addr1" in df.columns:
 
@@ -225,7 +278,7 @@ with col2:
 
 
         region = st.selectbox(
-            "📍 지역",
+            "📍 지역 선택",
             regions
         )
 
@@ -256,141 +309,137 @@ if region != "전체":
 
 
 
-
 st.subheader(
-    f"🎪 축제 {len(df)}개 발견"
+    f"🎪 검색된 축제 : {len(df)}개"
 )
 
 
 
-# ==============================
+# ======================================
 # 랜덤 추천
-# ==============================
-
+# ======================================
 
 if st.button(
-    "🎲 랜덤 축제 추천"
+    "🎲 오늘의 축제 추천"
 ):
 
-
-    festival = random.choice(
+    choice = random.choice(
         df.to_dict("records")
     )
 
 
     st.success(
         f"""
-        🌟 오늘의 추천
+        🎉 추천 축제
 
-        🎪 {festival.get('title')}
+        {choice.get('title')}
 
-        📍 {festival.get('addr1','')}
+        📍
+        {choice.get('addr1','')}
 
         📅
-        {festival.get('eventstartdate','')}
-        -
-        {festival.get('eventenddate','')}
+        {choice.get('eventstartdate')}
+        ~
+        {choice.get('eventenddate')}
         """
     )
 
 
 
-# ==============================
-# 카드 출력
-# ==============================
+# ======================================
+# 축제 카드
+# ======================================
 
 
-for f in df.to_dict("records"):
+for festival in df.to_dict(
+    "records"
+):
 
 
-    with st.container():
+    st.divider()
 
 
-        st.divider()
+    c1,c2 = st.columns(
+        [1,3]
+    )
 
 
-        c1,c2 = st.columns(
-            [1,3]
+    with c1:
+
+
+        image = festival.get(
+            "firstimage"
         )
 
 
-        with c1:
+        if image:
 
-
-            img = f.get(
-                "firstimage"
+            st.image(
+                image,
+                width=180
             )
 
 
-            if img:
 
-                st.image(
-                    img,
-                    width=180
-                )
+    with c2:
 
 
+        st.subheader(
+            festival.get(
+                "title",
+                "이름 없음"
+            )
+        )
 
-        with c2:
+
+        st.write(
+            "📍",
+            festival.get(
+                "addr1",
+                ""
+            )
+        )
 
 
-            st.header(
-                f.get(
-                    "title",
-                    "이름 없음"
-                )
+        st.write(
+            "📅",
+            festival.get(
+                "eventstartdate",
+                ""
+            ),
+            "~",
+            festival.get(
+                "eventenddate",
+                ""
+            )
+        )
+
+
+
+        if st.button(
+            "⭐ 관심 축제",
+            key=festival.get(
+                "contentid"
+            )
+        ):
+
+            st.session_state.favorites.append(
+                festival
+            )
+
+            st.toast(
+                "저장 완료!"
             )
 
 
-            st.write(
-                "📍",
-                f.get(
-                    "addr1",
-                    ""
-                )
-            )
 
-
-            st.write(
-                "📅",
-                f.get(
-                    "eventstartdate",
-                    ""
-                ),
-                "~",
-                f.get(
-                    "eventenddate",
-                    ""
-                )
-            )
-
-
-            if st.button(
-                "⭐ 저장",
-                key=f.get(
-                    "contentid"
-                )
-            ):
-
-                st.session_state.favorites.append(
-                    f
-                )
-
-                st.toast(
-                    "저장했습니다!"
-                )
-
-
-
-# ==============================
+# ======================================
 # 지도
-# ==============================
-
+# ======================================
 
 st.subheader(
     "🗺️ 축제 지도"
 )
-
 
 
 map_obj = folium.Map(
@@ -402,15 +451,14 @@ map_obj = folium.Map(
 )
 
 
-
-count = 0
-
+marker_count = 0
 
 
 for f in df.to_dict("records"):
 
 
     try:
+
 
         lat = float(
             f["mapy"]
@@ -422,20 +470,17 @@ for f in df.to_dict("records"):
 
 
         folium.Marker(
-
             [
                 lat,
                 lon
             ],
-
             popup=f["title"]
-
         ).add_to(
             map_obj
         )
 
 
-        count += 1
+        marker_count += 1
 
 
     except:
@@ -444,7 +489,7 @@ for f in df.to_dict("records"):
 
 
 
-if count:
+if marker_count:
 
 
     st_folium(
@@ -456,16 +501,15 @@ if count:
 
 else:
 
-
     st.info(
-        "지도 좌표 데이터가 없습니다."
+        "좌표 정보가 없습니다."
     )
 
 
 
-# ==============================
-# 즐겨찾기
-# ==============================
+# ======================================
+# 사이드바
+# ======================================
 
 
 st.sidebar.title(
@@ -480,12 +524,12 @@ if st.session_state.favorites:
     for f in st.session_state.favorites:
 
         st.sidebar.write(
-            "🎉",
-            f["title"]
+            f"🎉 {f['title']}"
         )
+
 
 else:
 
     st.sidebar.write(
-        "아직 저장한 축제가 없습니다."
+        "저장한 축제가 없습니다."
     )
