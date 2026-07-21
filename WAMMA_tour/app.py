@@ -22,7 +22,7 @@ st.set_page_config(
 
 st.title("🎉 대한민국 축제 탐험가")
 st.caption(
-    "한국관광공사 국문 관광정보 서비스_GW"
+    "한국관광공사 국문 관광정보 서비스 기반"
 )
 
 
@@ -35,19 +35,16 @@ try:
 
     API_KEY = st.secrets["TOUR_API_KEY"]
 
-    # 혹시 Decoding 키를 넣은 경우 대비
     API_KEY = unquote(API_KEY)
 
 
-except Exception:
+except:
 
     st.error(
         """
-        Streamlit Secrets 설정이 필요합니다.
+        Streamlit Secrets 설정 필요
 
-        형식:
-
-        TOUR_API_KEY="일반 인증키(Encoding)"
+        TOUR_API_KEY="Encoding 인증키"
         """
     )
 
@@ -56,7 +53,7 @@ except Exception:
 
 
 # =====================================
-# Tour API 주소
+# API 주소
 # =====================================
 
 BASE_URL = (
@@ -67,7 +64,7 @@ BASE_URL = (
 
 
 # =====================================
-# 축제 데이터 가져오기
+# 데이터 로딩
 # =====================================
 
 @st.cache_data(ttl=3600)
@@ -89,18 +86,19 @@ def load_festivals():
 
         "pageNo": 1,
 
-        "numOfRows": 200,
+        "numOfRows": 500,
 
         "eventStartDate":
             f"{today.year}0101",
 
         "eventEndDate":
             f"{today.year}1231"
+
     }
 
 
-
     try:
+
 
         response = requests.get(
             BASE_URL,
@@ -109,73 +107,23 @@ def load_festivals():
         )
 
 
-
-        # 디버그 정보
-        with st.expander(
-            "🔧 API 상태 확인"
-        ):
-
-            st.write(
-                "HTTP Status:",
-                response.status_code
-            )
-
-
-            st.write(
-                "요청 주소"
-            )
-
-            # 키는 숨김 처리
-            safe_url = response.url.replace(
-                API_KEY,
-                "***"
-            )
-
-            st.code(
-                safe_url
-            )
-
-
-            st.write(
-                "응답"
-            )
-
-            st.code(
-                response.text[:1000]
-            )
-
-
-
         if response.status_code != 200:
 
-            return []
-
-
-
-        try:
-
-            data = response.json()
-
-
-        except:
-
             st.error(
-                "JSON 변환 실패"
+                f"API 오류 : {response.status_code}"
             )
 
             return []
 
 
 
-        response_data = data.get(
-            "response",
-            {}
-        )
+        data = response.json()
 
 
-        header = response_data.get(
-            "header",
-            {}
+        header = (
+            data
+            .get("response", {})
+            .get("header", {})
         )
 
 
@@ -183,57 +131,34 @@ def load_festivals():
             "resultCode"
         ) != "0000":
 
-
             st.error(
-                f"""
-                API 오류
-
-                코드:
-                {header.get('resultCode')}
-
-                메시지:
-                {header.get('resultMsg')}
-                """
+                header.get(
+                    "resultMsg"
+                )
             )
 
-
             return []
 
 
 
-        body = response_data.get(
-            "body",
-            {}
+        items = (
+            data
+            ["response"]
+            ["body"]
+            ["items"]
+            ["item"]
         )
-
-
-        items = body.get(
-            "items"
-        )
-
-
-        if not items:
-
-            return []
-
-
-
-        festivals = items.get(
-            "item",
-            []
-        )
-
 
 
         if isinstance(
-            festivals,
+            items,
             dict
         ):
 
-            festivals = [festivals]
+            items = [items]
 
 
-        return festivals
+        return items
 
 
 
@@ -241,7 +166,7 @@ def load_festivals():
 
 
         st.error(
-            f"접속 오류: {e}"
+            f"API 연결 오류 : {e}"
         )
 
 
@@ -250,21 +175,36 @@ def load_festivals():
 
 
 # =====================================
-# 데이터 로드
+# 세션 상태
+# =====================================
+
+if "favorites" not in st.session_state:
+
+    st.session_state.favorites = []
+
+
+if "random_festival" not in st.session_state:
+
+    st.session_state.random_festival = None
+
+
+if "mbti_result" not in st.session_state:
+
+    st.session_state.mbti_result = None
+
+
+
+# =====================================
+# 데이터 준비
 # =====================================
 
 festivals = load_festivals()
 
 
-
 if not festivals:
 
     st.warning(
-        """
-        축제 데이터를 가져오지 못했습니다.
-
-        API 상태 확인 메뉴를 열어주세요.
-        """
+        "축제 정보를 가져오지 못했습니다."
     )
 
     st.stop()
@@ -278,17 +218,7 @@ df = pd.DataFrame(
 
 
 # =====================================
-# 즐겨찾기
-# =====================================
-
-if "favorites" not in st.session_state:
-
-    st.session_state.favorites = []
-
-
-
-# =====================================
-# 검색 영역
+# 검색 기능
 # =====================================
 
 st.subheader(
@@ -296,28 +226,27 @@ st.subheader(
 )
 
 
-
-col1, col2 = st.columns(2)
-
+c1,c2 = st.columns(2)
 
 
-with col1:
+with c1:
 
     keyword = st.text_input(
-        "축제 이름"
+        "축제명 검색"
     )
 
 
-
-with col2:
-
-
-    if "addr1" in df.columns:
+with c2:
 
 
-        regions = [
-            "전체"
-        ] + sorted(
+    regions = [
+        "전체"
+    ]
+
+
+    if "addr1" in df:
+
+        regions += sorted(
             df["addr1"]
             .dropna()
             .unique()
@@ -325,22 +254,22 @@ with col2:
         )
 
 
-        region = st.selectbox(
-            "지역",
-            regions
-        )
+    region = st.selectbox(
+        "지역",
+        regions
+    )
 
 
-    else:
 
-        region = "전체"
+filtered_df = df.copy()
 
 
 
 if keyword:
 
-    df = df[
-        df["title"]
+
+    filtered_df = filtered_df[
+        filtered_df["title"]
         .str.contains(
             keyword,
             case=False,
@@ -352,14 +281,16 @@ if keyword:
 
 if region != "전체":
 
-    df = df[
-        df["addr1"] == region
+    filtered_df = filtered_df[
+        filtered_df["addr1"]
+        ==
+        region
     ]
 
 
 
 st.success(
-    f"찾은 축제 : {len(df)}개"
+    f"현재 {len(filtered_df)}개 축제"
 )
 
 
@@ -368,26 +299,251 @@ st.success(
 # 랜덤 추천
 # =====================================
 
+st.divider()
+
+st.subheader(
+    "🎲 오늘의 랜덤 축제"
+)
+
+
+
 if st.button(
-    "🎲 랜덤 축제 추천"
+    "랜덤 축제 뽑기"
 ):
 
-    selected = random.choice(
+    st.session_state.random_festival = random.choice(
         df.to_dict("records")
     )
 
 
+
+if st.session_state.random_festival:
+
+
+    f = st.session_state.random_festival
+
+
+    st.success(
+        f"""
+🎉 {f.get('title')}
+
+📍 {f.get('addr1','')}
+
+📅
+{f.get('eventstartdate','')}
+~
+{f.get('eventenddate','')}
+"""
+    )
+
+
+
+# =====================================
+# MBTI 추천
+# =====================================
+
+st.divider()
+
+st.subheader(
+    "🧭 나의 축제 여행 MBTI"
+)
+
+
+a,b = st.columns(2)
+
+
+with a:
+
+
+    q1 = st.radio(
+        "여행 분위기",
+        [
+            "사람 많은 축제",
+            "조용한 축제"
+        ]
+    )
+
+
+    q2 = st.radio(
+        "즐기는 방식",
+        [
+            "먹거리 중심",
+            "체험 중심"
+        ]
+    )
+
+
+
+with b:
+
+
+    q3 = st.radio(
+        "느낌",
+        [
+            "전통/역사",
+            "감성/사진"
+        ]
+    )
+
+
+    q4 = st.radio(
+        "계획 스타일",
+        [
+            "계획형",
+            "즉흥형"
+        ]
+    )
+
+
+
+if st.button(
+    "✨ 내 축제 MBTI 확인"
+):
+
+
+    result = ""
+
+    result += (
+        "E"
+        if q1=="사람 많은 축제"
+        else "I"
+    )
+
+
+    result += (
+        "S"
+        if q2=="먹거리 중심"
+        else "N"
+    )
+
+
+    result += (
+        "T"
+        if q3=="전통/역사"
+        else "F"
+    )
+
+
+    result += (
+        "J"
+        if q4=="계획형"
+        else "P"
+    )
+
+
+    st.session_state.mbti_result = result
+
+
+
+if st.session_state.mbti_result:
+
+
+    mbti = st.session_state.mbti_result
+
+
+    st.success(
+        f"🎉 당신의 축제 유형 : {mbti}"
+    )
+
+
+    keyword_map = {
+
+
+        "E":
+        [
+            "축제",
+            "행사",
+            "공연"
+        ],
+
+
+        "I":
+        [
+            "문화",
+            "전통",
+            "꽃"
+        ],
+
+
+        "S":
+        [
+            "먹거리",
+            "음식",
+            "시장"
+        ],
+
+
+        "N":
+        [
+            "체험",
+            "문화",
+            "공연"
+        ],
+
+
+        "T":
+        [
+            "전통",
+            "역사"
+        ],
+
+
+        "F":
+        [
+            "꽃",
+            "사진",
+            "힐링"
+        ]
+
+    }
+
+
+    keywords = []
+
+    for char in mbti:
+
+        keywords += keyword_map.get(
+            char,
+            []
+        )
+
+
+    mbti_df = df[
+        df["title"]
+        .str.contains(
+            "|".join(keywords),
+            case=False,
+            na=False
+        )
+    ]
+
+
+
+    if len(mbti_df):
+
+
+        pick = random.choice(
+            mbti_df.to_dict("records")
+        )
+
+
+    else:
+
+
+        pick = random.choice(
+            df.to_dict("records")
+        )
+
+
+
     st.info(
         f"""
-        🎉 {selected.get('title')}
+추천 축제 🎪
 
-        📍 {selected.get('addr1','')}
+{pick['title']}
 
-        📅
-        {selected.get('eventstartdate','')}
-        ~
-        {selected.get('eventenddate','')}
-        """
+📍 {pick.get('addr1','')}
+"""
     )
 
 
@@ -396,50 +552,45 @@ if st.button(
 # 축제 카드
 # =====================================
 
-for festival in df.to_dict(
+st.divider()
+
+st.subheader(
+    "🎪 축제 목록"
+)
+
+
+for festival in filtered_df.to_dict(
     "records"
 ):
 
 
-    st.divider()
-
-
-    left, right = st.columns(
+    left,right = st.columns(
         [1,3]
     )
-
 
 
     with left:
 
 
-        image = festival.get(
+        if festival.get(
             "firstimage"
-        )
-
-
-        if image:
+        ):
 
             st.image(
-                image,
-                width=180
+                festival["firstimage"],
+                width=160
             )
-
 
 
     with right:
 
 
         st.subheader(
-            festival.get(
-                "title",
-                "이름 없음"
-            )
+            festival["title"]
         )
 
 
         st.write(
-            "📍",
             festival.get(
                 "addr1",
                 ""
@@ -447,27 +598,10 @@ for festival in df.to_dict(
         )
 
 
-        st.write(
-            "📅",
-            festival.get(
-                "eventstartdate",
-                ""
-            ),
-            "~",
-            festival.get(
-                "eventenddate",
-                ""
-            )
-        )
-
-
-
         if st.button(
             "⭐ 저장",
             key=str(
-                festival.get(
-                    "contentid"
-                )
+                festival["contentid"]
             )
         ):
 
@@ -475,10 +609,12 @@ for festival in df.to_dict(
                 festival
             )
 
-
             st.toast(
-                "저장 완료!"
+                "저장 완료"
             )
+
+
+    st.divider()
 
 
 
@@ -491,8 +627,7 @@ st.subheader(
 )
 
 
-
-map_obj = folium.Map(
+m = folium.Map(
     location=[
         36.5,
         127.8
@@ -501,32 +636,19 @@ map_obj = folium.Map(
 )
 
 
-
-for festival in df.to_dict(
+for f in filtered_df.to_dict(
     "records"
 ):
-
 
     try:
 
         folium.Marker(
             [
-                float(
-                    festival["mapy"]
-                ),
-
-                float(
-                    festival["mapx"]
-                )
+                float(f["mapy"]),
+                float(f["mapx"])
             ],
-
-            popup=
-            festival["title"]
-
-        ).add_to(
-            map_obj
-        )
-
+            popup=f["title"]
+        ).add_to(m)
 
     except:
 
@@ -535,7 +657,7 @@ for festival in df.to_dict(
 
 
 st_folium(
-    map_obj,
+    m,
     width=900,
     height=500
 )
@@ -551,19 +673,8 @@ st.sidebar.title(
 )
 
 
-if st.session_state.favorites:
-
-
-    for item in st.session_state.favorites:
-
-        st.sidebar.write(
-            "🎉",
-            item["title"]
-        )
-
-
-else:
+for f in st.session_state.favorites:
 
     st.sidebar.write(
-        "저장한 축제가 없습니다."
+        f"🎉 {f['title']}"
     )
